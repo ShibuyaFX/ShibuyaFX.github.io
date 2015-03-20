@@ -1,0 +1,156 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "ShibuyaFX"
+date: "13 March, 2015"
+output: html_document
+---
+
+```{r Library,echo= FALSE, message = FALSE, warning = FALSE}
+library(foreach)
+library(doParallel)
+library(dplyr)
+library(lubridate)
+library(caret)
+library(randomForest)
+library(Hmisc)
+library(ggplot2)
+library(scales)
+library (grid)
+library (gridExtra)
+library(rattle)
+library(rpart)
+library(knitr)
+```
+
+```{r parallel_processing_setting, echo= FALSE, message = FALSE, warning=FALSE, results ='hide'}
+Cores <- detectCores()
+if(Cores >2) {Cores <- Cores-2}
+cl <- makeCluster(Cores)
+registerDoParallel(cl)  ## to register the total number of cores-2 for parallel processing
+```
+
+##Synopsis
+
+Data were collected from sensors on the arm, forearm, belt and dumbell as part of a research study on **[human activity recognition](http://groupware.les.inf.puc-rio.br/har)**. Click on the link to find out more about the research. Therefore, this report aims to explain how a prediction model was dervied based on the *training data* provided in the research study and how it was used to predict the "classe" variable of the *test data*, i.e. how the subjects in the test data executed the exercise. The outcome of the model from this report was that it achieved 100% correctness in one attempt on the test data. 
+The outcome of problem_id 1 - 20 in the test data is as follows:  
+"B" "A" "B" "A" "A" "E" "D" "B" "A" "A" "B" "C" "B" "A" "E" "E" "A" "B" "B" "B"  
+  
+##Loading and PreProcessing of data
+
+This report assumed that the training and test dataset has already been downloaded into the working directory. The dataset is also available at the following links,  
+**[Training Data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)**  
+**[Test Data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)**  
+  
+The training data contains **160** variables. Hence, it is necessary to trim down the number of variables to be used in the model. The central focus of the prediction model is to predict the manner in which the subject did the exercise. Thus, only raw data from the various sensors were used to build the model **(to predict X, use data related to X)**. Variables that were derived, calculated or other information such as date or user name were removed from both datasets. The eventual number of predictors in the data set is 52 and 1 outcome, classe.
+
+```{r Loading_and_PreProcessing_Data, cache = TRUE, echo = TRUE}
+
+pmltrain <- read.csv("pml-training.csv", sep=",", header =TRUE)
+pmltest <- read.csv("pml-testing.csv", sep=",", header = TRUE)
+
+pmltrainReduced <- pmltrain
+pmltrainReduced <- pmltrainReduced[,!apply(pmltrainReduced,2, function(x) any(is.na(x)))]
+pmltrainReduced <- pmltrainReduced[-grep("^kurtosis|^skewness|^amplitude|^max|^min|^avg|^stddev|^var", names(pmltrainReduced))]
+pmltrainReduced <- pmltrainReduced[,-(1:7)]
+pmltrainReduced <- pmltrainReduced[sample(1:nrow(pmltrainReduced)),]
+pmltestReduced <- pmltest
+pmltestReduced <- pmltestReduced[,!apply(pmltestReduced,2, function(x) any(is.na(x)))]
+pmltestReduced <- pmltestReduced[,-(1:7)]
+```
+
+##Data Slicing
+
+The reduced training dataset is then apportioned 70% and 30% for further training and testing respectively. **pmltestReduced**, which contains 20 test set will be used a validation data set. A seed is being set for the reproducibility of the result obtained in this report.
+
+```{r Data_Slicing, echo=TRUE, cache = TRUE}
+
+set.seed(8382)
+inTrain <- createDataPartition(y=pmltrainReduced$classe, p=0.7, list=FALSE)
+training <- pmltrainReduced[inTrain,]
+testing <- pmltrainReduced[-inTrain,]
+dim(training)
+dim(testing)
+```
+
+##Model One
+
+This report will use different algorithms to train the models and will compare the accuracy of the models after it has been used to predict the testing dataset. Eventually, it will be decided which model(s) to be used on the validation data set, depending on the accuracy of the prediction. All models will be trained with **3-Fold Cross Validation**.  
+
+```{r Train_Control, echo=TRUE}
+fitControl = trainControl(method = "cv", number = 3)
+```
+
+
+We will begin with using Recursive Partitioning, **rpart**, for training of the first model. The model will then be used to predict *classe* based on the 30% testing data set. A matrix will be shown to display its accuracy against the actual *classe* of the testing data set.
+
+```{r rpart_model, echo = TRUE, cache=TRUE}
+
+fitModel1 <- train(classe~., method ="rpart", data = training, trControl=fitControl)
+predModel1 <- predict(fitModel1, testing)
+confusionMatrix(testing$classe, predModel1)
+```
+
+From the results above, the accuracy of the model is around **49.8%**. Thus, the *In Sample Error* is around **50.2%**. It can then be expected that the *Out of Sample Error* is more than **50.2%**. 
+
+##Model Two
+
+The algorithm to be used for the next model is Random Forest, **rf**. The model will then be used to predict *classe* based on the 30% testing data set. A matrix will be shown to display its accuracy against the actual *classe* of the testing data set.
+
+```{r rf_model, echo=TRUE, cache=TRUE}
+
+fitModel2 <- train(classe~., method ="rf", data= training, trControl =fitControl)
+predModel2 <- predict(fitModel2, testing)
+confusionMatrix(testing$classe, predModel2)
+
+```
+
+From the results above, the accuracy of the model is around **99.4%**. Thus, the *In Sample Error* is **0.6%**. It can then be expected that the *Out of Sample Error* is more than **0.6%**.  
+
+##Model Three
+
+The algorithm to be used for the final model is Generalized Boosted Regression Modeling, **gbm**. The model will then be used to predict *classe* based on the 30% testing data set. A matrix will be shown to display its accuracy against the actual *classe* of the testing data set.
+
+```{r gbm_tune, echo=FALSE}
+gbmGrid = expand.grid(interaction.depth = c(1, 5, 9), n.trees = (1:10)*50, shrinkage = 0.1)
+```
+
+```{r gbm_model, echo=TRUE, cache=TRUE, message = FALSE, warning = FALSE}
+
+fitModel3 <- train(classe~., method ="gbm", data=training, trControl=fitControl, tuneGrid = gbmGrid)
+predModel3 <- predict(fitModel3, testing)
+confusionMatrix(testing$classe, predModel3)
+
+```
+
+From the results above, the accuracy of the model is around **99.7%**. Thus, the *In Sample Error* is **0.3%**. It can then be expected that the *Out of Sample Error* is more than **0.3%**.  
+
+##Plots of Actual outcome Vs Predicted outcome for all three models
+```{r plots, echo=FALSE, cache =TRUE}
+
+qplot(testing$classe, predModel1, colour = testing$classe, geom = c("jitter"), main = "Recursive Partition (rpart) ", xlab ="Actual Outcome", ylab = "Predicted Outcome")
+
+qplot(testing$classe, predModel2, colour = testing$classe, geom = c("jitter"), main = "Random Forest (rf) ", xlab ="Actual Outcome", ylab = "Predicted Outcome")
+
+qplot(testing$classe, predModel3, colour = testing$classe, geom = c("jitter"), main = "Generalized Boosted Regression Modeling (gbm) ", xlab ="Actual Outcome", ylab = "Predicted Outcome")
+```
+
+##Validation
+
+From the above comparisons, fitModel2(**rf**) and fitModel3(**gbm**), achieved very high accuracy(>99%) when comparing against the testing data set. Thus, both models will be used to predict the outcome of the validation data set, for the purpose of counter-checking both sets of answers.
+
+```{r validation, echo= TRUE, cache = TRUE}
+
+pmltestRF <- pmltestReduced
+pmltestGBM <- pmltestReduced 
+
+pmltestRF$predOutcomeRF <- predict(fitModel2, pmltestRF)
+
+pmltestGBM$predOutcomeGBM <- predict(fitModel3, pmltestGBM)
+
+outcome <- cbind(as.character(pmltestRF$predOutcomeRF),as.character(pmltestGBM$predOutcomeGBM))
+colnames(outcome) <- c("RF", "GBM")
+outcome
+```
+
+Both prediction models achieved the same outcome.  
+The above answers were being submitted to Coursera and it was assessed to be correct.
