@@ -1,0 +1,75 @@
+---
+title       : Course Project Slidify (Central Limit Theorem Application)
+subtitle    : Presentation  
+author      : ShibuyaFX
+job         : 
+framework   : io2012        # {io2012, html5slides, shower, dzslides, ...}
+highlighter : highlight.js  # {highlight.js, prettify, highlight}
+hitheme     : tomorrow      # 
+widgets     : []            # {mathjax, quiz, bootstrap}
+mode        : selfcontained # {standalone, draft}
+knit        : slidify::knit2slides
+---
+
+```{r Library,echo= FALSE, message = FALSE, warning = FALSE}
+library(foreach)
+library(doParallel)
+library(ggplot2)
+library(scales)
+library (grid)
+library (gridExtra)
+library(knitr)
+```
+
+## Overview (1)
+
+The shiny application aims to quickly demonstrate the basic idea of Central Limit Theorem(CLT). CLT states that the distribution of averages becomes that of a standard normal as the sample size of the simulation increases and that the distribution will be centered at the population mean. This application hope to assist users to understand this theory.
+
+---
+
+## Overview (2)
+
+Exponential distribution is being used in the application. Each sample is the average of 40 exponentials. Lambda rate is 0.2. Plot 1 will be generated with a sample size of 100 while Plot 2 will be generated with a sample size of 10000. A red line, which is the population mean (1/lambda = 5), will be added into both plots so as to demonstrate how the distribution converges towards the population mean.      
+  
+With the increase in sample size from plot 1 to plot 2, it was demonstrated that the distribution becomes that of a normal distribution.
+
+---
+
+## Plot 1
+
+```{r simulation, fig.height =5, echo = FALSE, message=FALSE, warning = FALSE}
+lambda <- 0.2
+expo <- 40
+sim <- 100
+
+samp <- foreach(icount(sim), .combine = rbind) %dopar% round(mean(rexp(expo,lambda)),2) ## calculate the mean of 40 exponential distributions with rate 0.2, rounded to 2 decimal place, for 1000 times and rbind the 1000 results together
+colnames(samp) <- c("x")
+samp <- as.data.frame(samp) ## convert samp into a data frame
+
+g <- ggplot(samp, aes(x = x)) + geom_histogram(binwidth=.2, colour = "black", fill = "green",aes(y = ..density..) )
+g <- g + geom_vline(xintercept =5, size=2, colour = "red") + stat_density(colour = "blue", geom = "line", position = "identity", size = 1.5)
+g <- g + labs( x = "Mean")
+g
+```
+
+---
+
+## Plot 2
+
+```{r simulation2, fig.height =5, echo = FALSE, cache = TRUE}
+sim <- 10000
+
+set.seed(227)
+samp2 <- foreach(icount(sim), .combine = rbind) %dopar% round(mean(rexp(expo,lambda)),2)
+colnames(samp2) <- c("x")
+samp2 <- as.data.frame(samp2)
+
+g1 <- ggplot(samp2, aes(x = x)) + geom_histogram(binwidth=.2, colour = "black", fill = "green",aes(y = ..density..) )
+g1 <- g1 + geom_vline(xintercept =5, size=2, colour = "red") + stat_density(colour = "blue", geom = "line", position = "identity", size = 1.5)
+
+g1 <- g1 + labs( x = "Mean")
+g1
+```
+
+
+
