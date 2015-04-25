@@ -58,10 +58,10 @@ g
 
 ## Plot 2
 
-Sample size is 3000.
+Sample size is 10000.
 
 ```{r simulation2, fig.height =5, echo = FALSE, cache = TRUE, warning = FALSE}
-sim <- 3000
+sim <- 10000
 
 set.seed(227)
 samp2 <- foreach(icount(sim), .combine = rbind) %dopar% round(mean(rexp(expo,lambda)),2)
